@@ -1,0 +1,41 @@
+name: A-ART Daily Content Bot
+
+on:
+  # 1. اجرا به صورت دستی (با دکمه)
+  workflow_dispatch:
+  
+  # 2. اجرا به صورت خودکار (زمان‌بندی شده)
+  schedule:
+    # ساعت 6:30 صبح جهانی (حدود 10 صبح ایران)
+    # فرمت: دقیقه ساعت روز ماه هفته
+    - cron: '30 6 * * *'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+
+      - name: Run A-ART Bot
+        env:
+          # اینجا رمزها را از گیت‌هاب می‌گیریم و به پایتون می‌دهیم
+          METIS_API_KEY: ${{ secrets.METIS_API_KEY }}
+          GOOGLE_SCRIPT_URL: ${{ secrets.GOOGLE_SCRIPT_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+        run: python bot.py
+
+        sdsdfsdf
