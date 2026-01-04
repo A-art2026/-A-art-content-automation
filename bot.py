@@ -8,14 +8,15 @@ import time
 import random
 import feedparser
 import os
-import re  # اضافه شده برای تمیزکاری متن
-import os  # این کتابخانه برای خواندن رمزها از گیت‌هاب است
+import re
 
-# ==================== CONFIGURATION (SECURE MODE) ====================
-# به جای نوشتن رمز، می‌گوییم: "برو از گیت‌هاب بپرس رمز چیه"
+# --- تنظیمات یونیکد ---
+sys.stdout.reconfigure(encoding='utf-8')
+
+# ==================== CONFIGURATION ====================
+# دریافت رمزها از گیت‌هاب
 METIS_API_KEY = os.environ.get("METIS_API_KEY")
 GOOGLE_SCRIPT_URL = os.environ.get("GOOGLE_SCRIPT_URL")
-
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHANNEL_ID = os.environ.get("TELEGRAM_CHANNEL_ID")
 
@@ -26,16 +27,15 @@ SEARCH_TOPICS_POOL = [
     "Gen-Z psychology and consumer behavior",
     "Psychology of Gen-Z for business owners"
 ]
-# =====================================================================sdfsd
+# =======================================================
 
 client = openai.OpenAI(
     api_key=METIS_API_KEY,
     base_url="https://api.metisai.ir/openai/v1"
 )
 
-# --- تابع جدید برای تمیز کردن متن‌های اضافی ---
+# --- توابع کمکی ---
 def clean_prefix(text):
-    # حذف عباراتی مثل "کپشن تلگرام:" یا "متن لینکدین:" از اول جملات
     patterns = [r"کپشن تلگرام:?", r"متن تلگرام:?", r"Telegram Caption:?", r"LinkedIn Post:?", r"متن لینکدین:?"]
     for p in patterns:
         text = re.sub(p, "", text, flags=re.IGNORECASE).strip()
@@ -48,7 +48,7 @@ def load_knowledge_base():
     except FileNotFoundError:
         return ""
 
-# --- بخش گوگل نیوز (بدون تغییر) ---
+# --- گوگل نیوز ---
 def fetch_real_trends():
     chosen_topic = random.choice(SEARCH_TOPICS_POOL)
     print(f"🌍 Topic: '{chosen_topic}'")
@@ -95,9 +95,9 @@ def add_topics_to_queue(topics_list):
     if topics_list:
         requests.post(GOOGLE_SCRIPT_URL, data=json.dumps({"action": "add_topics", "topics": topics_list}), headers={'Content-Type': 'application/json'})
 
-# --- تولید محتوا (با فیکس باگ‌ها) ---
+# --- تولید محتوا (GPT-4o) ---
 def generate_content(topic):
-    print(f"✍️  Writing: {topic}") 
+    print(f"✍️  Writing with GPT-4o: {topic}") 
     knowledge = load_knowledge_base()
     
     article_prompt = f"""
@@ -111,67 +111,81 @@ def generate_content(topic):
     FORMAT: HTML tags only (<p>, <h2>, <ul>, <li>).
     
     ⛔ CRITICAL RULES:
-    1. DO NOT use ```html or ``` markdown tags at the start/end.
+    1. DO NOT use ```html or ``` markdown tags.
     2. DO NOT write <h1>.
     3. Start directly with the text.
     """
     
     try:
+        # استفاده از مدل GPT-4o برای بالاترین کیفیت متن
         article_raw = client.chat.completions.create(model="gpt-4o", messages=[{"role":"user", "content": article_prompt}]).choices[0].message.content
-        
-        # ✅ فیکس ۱: حذف تگ‌های مارک‌داون مزاحم
         article = article_raw.replace("```html", "").replace("```", "").strip()
         
         social_prompt = f"""
         Topic: {topic}
-        
-        1. Write a Telegram Caption:
-           - Casual, Gen-Z tone.
-           - Use paragraphs (leave empty lines).
-           - Do NOT start with "Here is caption". Just the text.
-        
-        2. Write a LinkedIn Post:
-           - Professional & Analytical.
-        
+        1. Telegram Caption (Casual, Gen-Z tone, Use paragraphs).
+        2. LinkedIn Post (Professional).
         Separator: '---'
         """
         socials = client.chat.completions.create(model="gpt-4o", messages=[{"role":"user", "content": social_prompt}]).choices[0].message.content
         parts = socials.split('---')
         
-        # ✅ فیکس ۲: تمیز کردن پیشوندها
         tg_text = clean_prefix(parts[0].strip())
         li_text = clean_prefix(parts[1].strip()) if len(parts) > 1 else ""
         
-        title = client.chat.completions.create(model="gpt-3.5-turbo", messages=[{"role":"user", "content": f"Clickbait Persian title for: {topic}"}]).choices[0].message.content.replace('"','')
+        title = client.chat.completions.create(model="gpt-4o", messages=[{"role":"user", "content": f"Clickbait Persian title for: {topic}"}]).choices[0].message.content.replace('"','')
         
         return title, article, tg_text, li_text
     except Exception as e:
         print(f"❌ Generation Error: {e}")
         return None, None, None, None
 
+# --- ساخت تصویر (Flux Pro via Metis) ---
 def generate_image(topic):
-    print("🎨 Image...")
+    print("🎨 Generating Image (Flux Pro)...")
     try:
-        trans = client.chat.completions.create(model="gpt-3.5-turbo", messages=[{"role":"user", "content": f"Translate topic to visual description: {topic}"}]).choices[0].message.content
-        prompt = f"Cinematic shot, {trans}, Dark Cyberpunk style, Matte Black background with Acid Lime Green (#CCFF00) neon highlights. A mysterious black crow with glowing green eyes is watching. 8k render."
-        encoded = urllib.parse.quote(prompt)
-        seed = random.randint(1, 99999)
-        return f"https://image.pollinations.ai/prompt/{encoded}?width=1280&height=720&nologo=true&seed={seed}&model=flux"
-    except: return "https://via.placeholder.com/800x450"
+        # 1. ترجمه موضوع به پرامپت انگلیسی
+        trans = client.chat.completions.create(model="gpt-4o", messages=[{"role":"user", "content": f"Translate topic to visual description: {topic}"}]).choices[0].message.content
+        
+        # 2. پرامپت استایل A-ART
+        final_prompt = f"Cinematic shot, {trans}, Dark Cyberpunk style, Matte Black background with Acid Lime Green (#CCFF00) neon highlights. A mysterious black crow with glowing green eyes is watching. 8k render, hyper-realistic."
+        
+        # 3. تلاش برای استفاده از API متیس (Flux)
+        # نکته: اگر متیس مدل flux-pro را با نام دیگری ارائه می‌دهد، اینجا باید عوض شود.
+        # معمولا dall-e-3 استاندارد است، اما ما درخواست flux میکنیم.
+        try:
+            response = client.images.generate(
+                model="flux-pro", # درخواست مدل فلاکس پرو
+                prompt=final_prompt,
+                size="1024x1024",
+                quality="standard",
+                n=1,
+            )
+            return response.data[0].url
+        except Exception as api_error:
+            print(f"⚠️ Metis API Error (switching to backup): {api_error}")
+            
+            # 4. بک‌آپ: استفاده از Pollinations (اگر API متیس ارور داد)
+            encoded = urllib.parse.quote(final_prompt)
+            seed = random.randint(1, 99999)
+            return f"https://image.pollinations.ai/prompt/{encoded}?width=1280&height=720&nologo=true&seed={seed}&model=flux"
 
-# --- انتشار (با فیکس لینک) ---
+    except Exception as e:
+        print(f"❌ Image Error: {e}")
+        return "https://via.placeholder.com/800x450"
+
+# --- انتشار ---
 def publish_telegram(image_url, caption, title):
     print("✈️  Telegram...")
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
     
-    # ✅ فیکس ۳: پاراگراف‌بندی و فاصله درست لینک
     final_caption = f"<b>{title}</b>\n\n{caption}\n\n──────────────\n🔗 <b>مطالعه کامل مقاله:</b>\nhttps://aart-team.com/blog/"
     
     payload = {
         "chat_id": TELEGRAM_CHANNEL_ID,
         "photo": image_url,
         "caption": final_caption,
-        "parse_mode": "HTML" # استفاده از HTML برای بولد کردن تایتل
+        "parse_mode": "HTML"
     }
     try:
         res = requests.post(url, data=payload).json()
@@ -189,7 +203,7 @@ def finalize(row_id, title, content, image, tg_link, li_text):
 
 # --- MAIN ---
 if __name__ == "__main__":
-    print("\n--- 🚀 A-ART BOT (Bug Fix Edition) ---")
+    print("\n--- 🚀 A-ART BOT (Advanced Models) ---")
     tasks = get_pending_topics()
     if tasks:
         t = tasks[0]
