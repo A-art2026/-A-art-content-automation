@@ -107,7 +107,7 @@ def generate_content(topic):
     TOPIC: {topic}
     
     INSTRUCTIONS:
-    Write a 600-word blog post.
+    Write a 800-word blog post.
     FORMAT: HTML tags only (<p>, <h2>, <ul>, <li>).
     
     ⛔ CRITICAL RULES:
