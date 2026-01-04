@@ -23,10 +23,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install openai requests feedparser
 
-      - name: Run A-ART Bot
+     - name: Run A-ART Bot
         env:
           METIS_API_KEY: ${{ secrets.METIS_API_KEY }}
           GOOGLE_SCRIPT_URL: ${{ secrets.GOOGLE_SCRIPT_URL }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
-        run: python blog-automation.py
+        run: python bot.py
